@@ -3,6 +3,9 @@
 #include <rmbrt-font/font.h>
 #include <rmbrt-ui/view.h>
 #include <rmbrt-ui/render.h>
+#include <rmbrt-ui/mouse.h>
+#include <rmbrt-ui/elem.h>
+#include <rmbrt-ui/textfield.h>
 #include <range.h>
 #include <input.h>
 #include "vertex.h"
@@ -33,6 +36,8 @@ static DECL_UNIFORM_LOCS(Shader);
 static RGL_HANDLE(RGLPipelineState) pipeline;
 static RGL_HANDLE(RGLVertexFetch) vao;
 static RGL_HANDLE(RGLVertexFetch) vao_lines;
+
+static void init_memory();
 
 EXPORT void on_start()
 {
@@ -65,6 +70,8 @@ EXPORT void on_start()
 	rgl_new_rasterisers(1, &config.rasteriser, &raster);
 
 	rgl_new_pipelines(1, &pipeline, &config);
+
+	init_memory();
 }
 
 void setup_normal_vao()
@@ -205,6 +212,38 @@ static void scroll_animate(struct Scroll * scroll, u64 now, u64 dt)
 static u16 last_screen_h = 0;
 static u64 g_time = 0;
 
+enum Interpret {
+	INTERPRET,
+	NO_INTERPRET_HEX,
+	NO_INTERPRET_DEC
+};
+static enum Interpret g_interpret = INTERPRET;
+
+
+EXPORT bool on_mouse_press(enum MouseButton button, i32 x, i32 y, enum ModifierKeys mods)
+{
+	mouse_handle_press(button, x, y);
+	bool ret = rui_handle_mouse_press(x, (i32)rui_frame_h - y, button, mods);
+	if(rui_needs_redraw()) schedule_repaint(true);
+	return ret;
+}
+
+EXPORT bool on_mouse_release(enum MouseButton button, i32 x, i32 y, enum ModifierKeys mods)
+{
+	mouse_handle_release(button, x, y);
+	bool ret = rui_handle_mouse_release(x, (i32)rui_frame_h - y, button, mods);
+	if(rui_needs_redraw()) schedule_repaint(true);
+	return ret;
+}
+
+EXPORT bool on_mouse_move(i32 x, i32 y, enum ModifierKeys mods)
+{
+	mouse_handle_move(x, y, mods);
+	bool ret = rui_handle_mouse_move(x, (i32)rui_frame_h - y, mods);
+	if(rui_needs_redraw()) schedule_repaint(true);
+	return ret;
+}
+
 
 EXPORT u8 on_keydown(enum PhysicalKeyboard key, u32 unicode, enum ModifierKeys modifiers)
 {
@@ -221,7 +260,11 @@ EXPORT u8 on_keydown(enum PhysicalKeyboard key, u32 unicode, enum ModifierKeys m
 		return true;
 #endif
 
-	if(key == PK_PAGE_UP) {
+	if(rui_handle_keydown(key, unicode, modifiers))
+	{
+		if(rui_needs_redraw())
+			schedule_repaint(true);
+	} else if(key == PK_PAGE_UP) {
 		scroll_add(&g_y_scroll, -(last_screen_h / 3), g_time);
 		schedule_repaint(true);
 	} else if(key == PK_PAGE_DOWN) {
@@ -265,8 +308,62 @@ static u8 _memory[1024];
 static enum DataType _layout[1024];
 static struct Memory g_memory = { _memory, sizeof(_memory) };
 
+static void init_memory()
+{
+	unsigned seed = 0x133bacdf;
+	for(unsigned i = 0; i < _Countof(_memory); i++)
+	{
+		seed = seed * seed % 0xbcadef35 + i;
+		*(u8 *)&_memory[i] = seed;
+		_layout[i] = DT_U1; // seed % _Countof(k_data_types);
+	}
+
+	memset(_layout, DT_ANY, sizeof(_layout));
+	memset(_layout+sizeof(_layout) - 8, DT_ANY, 8);
+
+	{
+		auto str = String("Hello, world!\nTest 1 2 3");
+		_layout[0] = DT_U2;
+		_layout[2] = DT_U2;
+		*(u16 *)&_memory[0] = 4;
+		*(u16 *)&_memory[2] = str.length;
+		memset(_layout+4, DT_CHAR, str.length +1);
+		_memory[4+memcpy_string(_memory+4, str)] = 0;
+		_layout[32] = DT_S8;
+		_layout[560] = DT_S4;
+		_layout[560+32] = DT_U8;
+		_layout[560+32+8] = DT_U8;
+		_layout[560+64] = DT_S4;
+		_layout[560+64+4] = DT_U4;
+	}
+}
+
+/* TODO:
+	- [ ] refactor layout logic into separate file & functions.
+	- [ ] use Views, so we can handle clicking and hovering of cells (one view for the memory grid, not per cell).
+	- [ ] when hovering a cell, we want to see its possible interpretations, and also explanations for things like EOL / \n, END / \0. And we want to show the ranges of types.
+	- [ ] add registers.
+	- [ ] add instructions & execution.
+	- [ ] add visualisation of active instruction (inputs, results, sources, destinations, description).
+	- [ ] add text field for code.
+	- [ ] add console for printing, and maybe for typing.
+	- [ ] add pointers, hovering over a pointer will highlight the cell it points to.
+	- [ ] add tutorial (maybe we can make the book as part of the program, instead of a separate document). We could even turn this into a puzzle game.
+	- [ ] add automatic saving of the last state.
+	- [ ] undo/redo?
+	- [ ] interactive programs? audio output?
+	- [ ] performance simulation, cache simulation, etc..
+	- [ ] extend font with lowercase letters.
+	- [ ] add higher language. C-like?
+*/
+
+static i64 g_reg_a = 0;
+static i64 g_reg_b = 0;
+
 EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 {
+	static char buffer[256];
+
 	rui_begin_frame(w, h);
 	//before_frame(w,h, dt);
 
@@ -275,6 +372,8 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 	last_screen_h = h;
 
 	if(!is_animating) dt = 0;
+	is_animating = false;
+
 
 	bool _is_scrolling = is_scrolling(&g_x_scroll, g_time) || is_scrolling(&g_y_scroll, g_time);
 
@@ -301,39 +400,230 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 
 	glViewport(0,0,w,h);
 
+	{
+		static struct {
+			struct String text;
+			enum Interpret value;
+		} const k_interpret_buttons[] = {
+			{ String("Show Interpretation"), INTERPRET },
+			{ String("Raw View (Hexadecimal)"), NO_INTERPRET_HEX },
+			{ String("Raw View (Decimal)"), NO_INTERPRET_DEC }
+		};
+
+		struct u16Quad q = {{w-250, h-20}, {200, 24}};
+		db_string(String("View options"), q.pos.x, q.pos.y, 0xff000000, 0xffcccccc);
+		q.pos.y -= 24;
+
+		for(unsigned i = 0; i < _Countof(k_interpret_buttons); i++)
+		{
+			if(rui_draw_button(k_interpret_buttons[i].text, q))
+				g_interpret = k_interpret_buttons[i].value;
+			q.pos.y -= 30;
+		}
+	}
+
+	{
+		enum Command : u8 {
+			CMD_NOP,
+			CMD_SET_A,
+			CMD_LOAD_A_U1,
+			CMD_LOAD_A_U2,
+			CMD_LOAD_A_U4,
+			CMD_LOAD_A_U8,
+			CMD_LOAD_A_S1,
+			CMD_LOAD_A_S2,
+			CMD_LOAD_A_S4,
+			CMD_LOAD_A_S8,
+
+			CMD_SET_B,
+			CMD_LOAD_B_U1,
+			CMD_LOAD_B_U2,
+			CMD_LOAD_B_U4,
+			CMD_LOAD_B_U8,
+			CMD_LOAD_B_S1,
+			CMD_LOAD_B_S2,
+			CMD_LOAD_B_S4,
+			CMD_LOAD_B_S8,
+
+			CMD_ADD,
+			CMD_SUB,
+			CMD_MUL,
+			CMD_B_SET_A,
+			CMD_A_SET_B,
+			CMD_X_SET_A,
+			CMD_X_SET_B,
+			CMD_SWAP_A_B,
+
+			CMD_STORE_A_AT_X_1,
+			CMD_STORE_A_AT_X_2,
+			CMD_STORE_A_AT_X_4,
+			CMD_STORE_A_AT_X_8,
+
+			CMD_STORE_X_AT_A_1,
+			CMD_STORE_X_AT_A_2,
+			CMD_STORE_X_AT_A_4,
+			CMD_STORE_X_AT_A_8
+		};
+
+		static struct {
+			struct String text;
+			enum Command value;
+		} const k_command_buttons[] = {
+			{ String("A = X"), CMD_SET_A },
+			{ String("B = X"), CMD_SET_B },
+			{ String("A = B"), CMD_A_SET_B },
+			{ String("B = A"), CMD_B_SET_A },
+			{ String("X = A"), CMD_X_SET_A },
+			{ String("X = B"), CMD_X_SET_B },
+			{ String("Swap A and B"), CMD_SWAP_A_B },
+
+			{ String("Compute"), 0 },
+			{ String("A = A + B"), CMD_ADD },
+			{ String("A = A - B"), CMD_SUB },
+			{ String("A = A * B"), CMD_MUL },
+
+			{ String("Load from memory"), 0 },
+			{ String("A = u8  @ [X]"), CMD_LOAD_A_U1 },
+			{ String("B = u8  @ [X]"), CMD_LOAD_B_U1 },
+			{ String("A = i8  @ [X]"), CMD_LOAD_A_S1 },
+			{ String("B = i8  @ [X]"), CMD_LOAD_B_S1 },
+			{ String("A = u16 @ [X]"), CMD_LOAD_A_U2 },
+			{ String("B = u16 @ [X]"), CMD_LOAD_B_U2 },
+			{ String("A = i16 @ [X]"), CMD_LOAD_A_S2 },
+			{ String("B = i16 @ [X]"), CMD_LOAD_B_S2 },
+			{ String("A = u32 @ [X]"), CMD_LOAD_A_U4 },
+			{ String("B = u32 @ [X]"), CMD_LOAD_B_U4 },
+			{ String("A = i32 @ [X]"), CMD_LOAD_A_S4 },
+			{ String("B = i32 @ [X]"), CMD_LOAD_B_S4 },
+			{ String("A = u64 @ [X]"), CMD_LOAD_A_U8 },
+			{ String("B = u64 @ [X]"), CMD_LOAD_B_U8 },
+			{ String("A = i64 @ [X]"), CMD_LOAD_A_S8 },
+			{ String("B = i64 @ [X]"), CMD_LOAD_B_S8 },
+
+			{ String("Store to memory"), 0 },
+			{ String("u8  @ [X] = A"), CMD_STORE_A_AT_X_1 },
+			{ String("u8  @ [A] = X"), CMD_STORE_X_AT_A_1 },
+			{ String("u16 @ [X] = A"), CMD_STORE_A_AT_X_2 },
+			{ String("u16 @ [A] = X"), CMD_STORE_X_AT_A_2 },
+			{ String("u32 @ [X] = A"), CMD_STORE_A_AT_X_4 },
+			{ String("u32 @ [A] = X"), CMD_STORE_X_AT_A_4 },
+			{ String("u64 @ [X] = A"), CMD_STORE_A_AT_X_8 },
+			{ String("u64 @ [A] = X"), CMD_STORE_X_AT_A_8 },
+		};
+
+		struct u16Quad q = {{w-178, h-200}, {128, 24}};
+
+		{
+			char * write = buffer; write += memcpy_string(write, String("Register A: "));
+			write += itoa_into(write, g_reg_a);
+			db_text(buffer, write-buffer, q.pos.x - q.size.x-8, q.pos.y, 0xff000000, 0xffcccccc);
+			q.pos.y -= 20;
+		}
+		{
+			char * write = buffer; write += memcpy_string(write, String("Register B: "));
+			write += itoa_into(write, g_reg_b);
+			db_text(buffer, write-buffer, q.pos.x - q.size.x-8, q.pos.y, 0xff000000, 0xffcccccc);
+			q.pos.y -= 30;
+		}
+
+		db_string(String("Commands"), q.pos.x - q.size.x - 8, q.pos.y, 0xff000000, 0xffcccccc);
+		//q.pos.y -= 24;
+
+		static struct RUINumberTextField s_addr_field = {
+			.min = -0x8000000000000000,
+			.max =  0x7fffffffffffffff,
+			.default_value = 0
+		};
+		db_string(String("X: "), q.pos.x, q.pos.y, 0xff000000, 0xffcccccc);
+		rui_number_textfield_draw(&s_addr_field, q.pos.x + 3*8, q.pos.y, q.size.x-3*8);
+		i64 input_value = rui_number_textfield_get(&s_addr_field);
+		q.pos.y -= 30;
+
+
+		enum Command cmd = CMD_NOP;
+		unsigned start = 0;
+		for(unsigned i = 0; i < _Countof(k_command_buttons); i++)
+		{
+			unsigned j = i - start;
+
+			auto q_ = q;
+
+			if(k_command_buttons[i].value == CMD_NOP)
+			{
+				if((j & 1) == 1) q.pos.y -= 30;
+				if(i) q.pos.y -= 4;
+				q_ = q;
+				q_.pos.x -= q.size.x + 8;
+				start = i+1; j = 1;
+
+				db_string(k_command_buttons[i].text, q_.pos.x, q_.pos.y, 0xff000000, 0xffcccccc);
+
+				q.pos.y -= 18;
+			} else
+			{
+				if((j & 1) == 0)
+					q_.pos.x -= q.size.x + 8;
+				if(rui_draw_button(k_command_buttons[i].text, q_))
+					cmd = k_command_buttons[i].value;
+				if((j & 1) == 1)
+					q.pos.y -= 30;
+			}
+
+		}
+
+		if(cmd != CMD_NOP) is_animating = true;
+
+		switch(cmd)
+		{
+		case CMD_NOP: break;
+		case CMD_SET_A: { g_reg_a = input_value; logint("X", input_value); } break;
+		case CMD_LOAD_A_U1: { g_reg_a = *(u8 const*)&_memory[input_value]; } break;
+		case CMD_LOAD_A_U2: { g_reg_a = *(u16 const*)&_memory[input_value]; } break;
+		case CMD_LOAD_A_U4: { g_reg_a = *(u32 const*)&_memory[input_value]; } break;
+		case CMD_LOAD_A_U8: { g_reg_a = *(u64 const*)&_memory[input_value]; } break;
+		case CMD_LOAD_A_S1: { g_reg_a = *(i8 const*)&_memory[input_value]; } break;
+		case CMD_LOAD_A_S2: { g_reg_a = *(i16 const*)&_memory[input_value]; } break;
+		case CMD_LOAD_A_S4: { g_reg_a = *(i32 const*)&_memory[input_value]; } break;
+		case CMD_LOAD_A_S8: { g_reg_a = *(i64 const*)&_memory[input_value]; } break;
+
+		case CMD_SET_B: { g_reg_b = input_value; } break;
+		case CMD_LOAD_B_U1: { g_reg_b = *(u8 const*)&_memory[input_value]; } break;
+		case CMD_LOAD_B_U2: { g_reg_b = *(u16 const*)&_memory[input_value]; } break;
+		case CMD_LOAD_B_U4: { g_reg_b = *(u32 const*)&_memory[input_value]; } break;
+		case CMD_LOAD_B_U8: { g_reg_b = *(u64 const*)&_memory[input_value]; } break;
+		case CMD_LOAD_B_S1: { g_reg_b = *(i8 const*)&_memory[input_value]; } break;
+		case CMD_LOAD_B_S2: { g_reg_b = *(i16 const*)&_memory[input_value]; } break;
+		case CMD_LOAD_B_S4: { g_reg_b = *(i32 const*)&_memory[input_value]; } break;
+		case CMD_LOAD_B_S8: { g_reg_b = *(i64 const*)&_memory[input_value]; } break;
+
+		case CMD_ADD: { g_reg_a += g_reg_b; } break;
+		case CMD_SUB: { g_reg_a -= g_reg_b; } break;
+		case CMD_MUL: { g_reg_a *= g_reg_b; } break;
+		case CMD_B_SET_A: { g_reg_b = g_reg_a; } break;
+		case CMD_A_SET_B: { g_reg_a = g_reg_b; } break;
+		case CMD_X_SET_A: { rui_number_textfield_set(&s_addr_field, g_reg_a); } break;
+		case CMD_X_SET_B: { rui_number_textfield_set(&s_addr_field, g_reg_b); } break;
+		case CMD_SWAP_A_B: { auto tmp = g_reg_a; g_reg_a = g_reg_b; g_reg_b = tmp; } break;
+
+		case CMD_STORE_A_AT_X_1: { *(u8 *) &_memory[input_value] = g_reg_a; } break;
+		case CMD_STORE_A_AT_X_2: { *(u16 *)&_memory[input_value] = g_reg_a; } break;
+		case CMD_STORE_A_AT_X_4: { *(u32 *)&_memory[input_value] = g_reg_a; } break;
+		case CMD_STORE_A_AT_X_8: { *(u64 *)&_memory[input_value] = g_reg_a; } break;
+
+		case CMD_STORE_X_AT_A_1: { *(u8 *) &_memory[input_value] = g_reg_b; } break;
+		case CMD_STORE_X_AT_A_2: { *(u16 *)&_memory[input_value] = g_reg_b; } break;
+		case CMD_STORE_X_AT_A_4: { *(u32 *)&_memory[input_value] = g_reg_b; } break;
+		case CMD_STORE_X_AT_A_8: { *(u64 *)&_memory[input_value] = g_reg_b; } break;
+		default: { panic("Forgot to implement this command!"); }
+		}
+		if(cmd != CMD_NOP) logint("X", input_value);
+	}
+
 	rgl_use_pipeline(pipeline);
 	glUniform2f(UNIFORM_LOCS(Shader).screen_size, (float) w * 4, (float) h * 4);
 
-	static char buffer[32];
 
 	db_string(String("CPU Simulator"), 8-g_x_scroll.offset, h-(8-g_y_scroll.offset), 0xff000000, 0xffcccccc);
-
-	unsigned seed = 0x133bacdf;
-	for(unsigned i = 0; i < _Countof(_memory); i++)
-	{
-		seed = seed * seed % 0xbcadef35 + i;
-		*(u8 *)&_memory[i] = seed;
-		_layout[i] = DT_U1; // seed % _Countof(k_data_types);
-	}
-
-	memset(_layout, DT_ANY, sizeof(_layout));
-	memset(_layout+sizeof(_layout) - 8, DT_ANY, 8);
-
-	{
-		auto str = String("Hello, world!\r\nTest 1 2 3");
-		_layout[0] = DT_U2;
-		_layout[2] = DT_U2;
-		*(u16 *)&_memory[0] = 4;
-		*(u16 *)&_memory[2] = str.length;
-		memset(_layout+4, DT_CHAR, str.length +1);
-		_memory[4+memcpy_string(_memory+4, str)] = 0;
-		_layout[32] = DT_S8;
-		_layout[560] = DT_S4;
-		_layout[560+32] = DT_U8;
-		_layout[560+32+8] = DT_U8;
-		_layout[560+64] = DT_S4;
-		_layout[560+64+4] = DT_U4;
-	}
 
 	enum { CELL_W = 36, CELL_H = 20, CACHE_LINE_BYTES = 32 };
 
@@ -365,6 +655,7 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 
 		unsigned len;
 		auto type = _layout[i];
+		if(g_interpret != INTERPRET) type = g_interpret == NO_INTERPRET_DEC ? DT_U1 : DT_ANY;
 		unsigned cells = k_data_types[type].size;
 		//unsigned maxlen = 3 * cells;
 		switch(type)
@@ -398,8 +689,8 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 			u8 c = *(u8 const*)cell;
 			switch(c)
 			{
-			case 0: { len = memcpy_string(buffer, String("\\0")); } break;
-			case '\n': { len = memcpy_string(buffer, String("\\n")); } break;
+			case 0: { len = memcpy_string(buffer, String("END")); } break;
+			case '\n': { len = memcpy_string(buffer, String("EOL")); } break;
 			case '\r': { len = memcpy_string(buffer, String("\\r")); } break;
 			default:
 				{
@@ -430,7 +721,10 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 
 		db_rectangle(&g_imBuf_lines, xp-2, h - 64+2 - yp, CELL_W * cells, 20, 0xff444444);
 		db_quad(&g_imBuf,            xp-2, h - 64+2 - yp, CELL_W * cells, 20, k_bg_colour[type].bg);
-		db_text(buffer, len,         xp+CELL_W*cells - 4 - 8*len, h - 64 - yp, k_bg_colour[type].font, k_bg_colour[type].bg);
+		if(type == DT_CHAR)
+			db_text(buffer, len,     xp+CELL_W/2*cells - 4*len, h - 64 - yp, k_bg_colour[type].font, k_bg_colour[type].bg);
+		else
+			db_text(buffer, len,     xp+CELL_W*cells - 4 - 8*len, h - 64 - yp, k_bg_colour[type].font, k_bg_colour[type].bg);
 
 		i += cells;
 	}
@@ -464,8 +758,9 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 
 	g_time += dt;
 
-	is_animating = _is_scrolling;
+	is_animating |= _is_scrolling;
 
 	rui_end_frame();
+	mouse_after_frame(w, h);
 	return !is_animating;
 }
