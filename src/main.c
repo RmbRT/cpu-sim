@@ -12,6 +12,7 @@
 #include "shader.h"
 
 #include "data_layout.h"
+#include "ram_vis.h"
 
 static char const fragment_shader[] = {
 #embed "fragment_shader.glsl"
@@ -110,12 +111,15 @@ u64 parse_int(struct String text) {
 	return acc;
 }
 
-u32 utoa_into(char * buffer, u64 number) {
-	u64 num = 10000000000000000000u;
+u32 utoa_into(char * buffer, u64 number, char ksep) {
+	u64 num =   10000000000000000000u;
+	u32 k   = 0b01001001001001001000u;
+	u8 i = 20;
 	bool had_digit = false;
 	char * write = buffer;
 	while(num)
 	{
+		--i;
 		u8 digit = number / num;
 		number = number % num;
 		num /= 10;
@@ -123,7 +127,9 @@ u32 utoa_into(char * buffer, u64 number) {
 		{
 			*write++ = '0'+digit;
 			had_digit = true;
+			if(ksep && (k & (1<<i))) *write++ = ksep;
 		}
+
 	}
 	if(!had_digit)
 		*write++ = '0';
@@ -131,7 +137,7 @@ u32 utoa_into(char * buffer, u64 number) {
 	return write - buffer;
 }
 
-u32 itoa_into(char * buffer, i64 number) {
+u32 itoa_into(char * buffer, i64 number, char ksep) {
 	char * write = buffer;
 	u64 abs = number;
 	if(number < 0)
@@ -140,7 +146,7 @@ u32 itoa_into(char * buffer, i64 number) {
 		abs = -number;
 	}
 
-	write += utoa_into(write, abs);
+	write += utoa_into(write, abs, ksep);
 	return (write - buffer);
 }
 
@@ -296,8 +302,8 @@ EXPORT u8 on_keydown(enum PhysicalKeyboard key, u32 unicode, enum ModifierKeys m
 }
 
 
-static struct DrawBuffer g_imBuf = DB_INIT(struct Vertex, GL_TRIANGLES);
-static struct DrawBuffer g_imBuf_lines = DB_INIT(struct Vertex, GL_LINES);
+struct DrawBuffer g_imBuf = DB_INIT(struct Vertex, GL_TRIANGLES);
+struct DrawBuffer g_imBuf_lines = DB_INIT(struct Vertex, GL_LINES);
 
 static bool is_animating = false;
 
@@ -339,22 +345,23 @@ static void init_memory()
 }
 
 /* TODO:
-	- [ ] refactor layout logic into separate file & functions.
+	- [X] refactor layout logic into separate file & functions.
 	- [ ] use Views, so we can handle clicking and hovering of cells (one view for the memory grid, not per cell).
 	- [ ] when hovering a cell, we want to see its possible interpretations, and also explanations for things like EOL / \n, END / \0. And we want to show the ranges of types.
-	- [ ] add registers.
-	- [ ] add instructions & execution.
+	- [X] add registers.
+	- [X] add instructions & execution.
 	- [ ] add visualisation of active instruction (inputs, results, sources, destinations, description).
-	- [ ] add text field for code.
+	- [ ] extend font with lowercase letters.
 	- [ ] add console for printing, and maybe for typing.
+	- [ ] add text field for code.
+		- [ ] add assembly language.
+		- [ ] add higher language. C-like?
 	- [ ] add pointers, hovering over a pointer will highlight the cell it points to.
 	- [ ] add tutorial (maybe we can make the book as part of the program, instead of a separate document). We could even turn this into a puzzle game.
 	- [ ] add automatic saving of the last state.
 	- [ ] undo/redo?
 	- [ ] interactive programs? audio output?
 	- [ ] performance simulation, cache simulation, etc..
-	- [ ] extend font with lowercase letters.
-	- [ ] add higher language. C-like?
 */
 
 static i64 g_reg_a = 0;
@@ -400,6 +407,9 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 
 	glViewport(0,0,w,h);
 
+	rgl_use_pipeline(pipeline);
+	glUniform2f(UNIFORM_LOCS(Shader).screen_size, (float) w * 4, (float) h * 4);
+
 	{
 		static struct {
 			struct String text;
@@ -410,7 +420,7 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 			{ String("Raw View (Decimal)"), NO_INTERPRET_DEC }
 		};
 
-		struct u16Quad q = {{w-250, h-20}, {200, 24}};
+		struct u16Quad q = {{8, 200}, {200, 24}};
 		db_string(String("View options"), q.pos.x, q.pos.y, 0xff000000, 0xffcccccc);
 		q.pos.y -= 24;
 
@@ -511,20 +521,72 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 			{ String("u64 @ [A] = X"), CMD_STORE_X_AT_A_8 },
 		};
 
-		struct u16Quad q = {{w-178, h-200}, {128, 24}};
+		struct u16Quad q = {{w-178, h-16}, {128, 24}};
 
 		{
-			char * write = buffer; write += memcpy_string(write, String("Register A: "));
-			write += itoa_into(write, g_reg_a);
-			db_text(buffer, write-buffer, q.pos.x - q.size.x-8, q.pos.y, 0xff000000, 0xffcccccc);
-			q.pos.y -= 20;
+			auto q_ = q;
+			q_.pos.x = q.pos.x-q.size.x-8;
+			db_string(String("A:"), q_.pos.x -32, q_.pos.y-2, 0xff000000, 0xffcccccc);
+			draw_cell(q_.pos.x, q_.pos.y, DT_U8, g_reg_a);
+			q_.pos.y -= CELL_H;
+			draw_cell(q_.pos.x, q_.pos.y, DT_S8, g_reg_a);
+			q_.pos.y -= CELL_H;
+			for(unsigned i = 0; i < 8; i++)
+			{
+				u8 c = g_reg_a >> (8*i);
+				draw_cell(q_.pos.x + CELL_W * i, q_.pos.y, DT_U1, c);
+			}
+			q_.pos.y -= CELL_H;
+			for(unsigned i = 0; i < 8; i++)
+			{
+				u8 c = g_reg_a >> (8*i);
+				draw_cell(q_.pos.x + CELL_W * i, q_.pos.y, DT_ANY, c);
+			}
+			q_.pos.y -= CELL_H;
+			for(unsigned i = 0; i < 8; i++)
+			{
+				u8 c = g_reg_a >> (8*i);
+				draw_cell(q_.pos.x + CELL_W * i, q_.pos.y, DT_CHAR, c);
+			}
+			q_.pos.y -= CELL_H;
+			q.pos.y = q_.pos.y;
 		}
+		q.pos.y -= 8;
 		{
-			char * write = buffer; write += memcpy_string(write, String("Register B: "));
-			write += itoa_into(write, g_reg_b);
-			db_text(buffer, write-buffer, q.pos.x - q.size.x-8, q.pos.y, 0xff000000, 0xffcccccc);
-			q.pos.y -= 30;
+			auto q_ = q;
+			q_.pos.x = q.pos.x-q.size.x-8;
+			db_string(String("B:"), q_.pos.x -32, q_.pos.y-2, 0xff000000, 0xffcccccc);
+			draw_cell(q_.pos.x, q_.pos.y, DT_U8, g_reg_b);
+			q_.pos.y -= CELL_H;
+			draw_cell(q_.pos.x, q_.pos.y, DT_S8, g_reg_b);
+			q_.pos.y -= CELL_H;
+			for(unsigned i = 0; i < 8; i++)
+			{
+				u8 c = g_reg_b >> (8*i);
+				draw_cell(q_.pos.x + CELL_W * i, q_.pos.y, DT_U1, c);
+			}
+			q_.pos.y -= CELL_H;
+			for(unsigned i = 0; i < 8; i++)
+			{
+				u8 c = g_reg_b >> (8*i);
+				draw_cell(q_.pos.x + CELL_W * i, q_.pos.y, DT_ANY, c);
+			}
+			q_.pos.y -= CELL_H;
+			for(unsigned i = 0; i < 8; i++)
+			{
+				u8 c = g_reg_b >> (8*i);
+				draw_cell(q_.pos.x + CELL_W * i, q_.pos.y, DT_CHAR, c);
+			}
+			q_.pos.y -= CELL_H;
+			q.pos.y = q_.pos.y;
 		}
+		q.pos.y -= 24;
+
+		rgl_use_pipeline(pipeline);
+		db_flush_and_draw(&g_imBuf, vbo);
+		db_flush_and_draw_from(&g_imBuf_lines, vbo_lines, vao_lines);
+		render_text(w, h);
+		rgl_use_pipeline(pipeline);
 
 		db_string(String("Commands"), q.pos.x - q.size.x - 8, q.pos.y, 0xff000000, 0xffcccccc);
 		//q.pos.y -= 24;
@@ -619,13 +681,8 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 		if(cmd != CMD_NOP) logint("X", input_value);
 	}
 
-	rgl_use_pipeline(pipeline);
-	glUniform2f(UNIFORM_LOCS(Shader).screen_size, (float) w * 4, (float) h * 4);
-
 
 	db_string(String("CPU Simulator"), 8-g_x_scroll.offset, h-(8-g_y_scroll.offset), 0xff000000, 0xffcccccc);
-
-	enum { CELL_W = 36, CELL_H = 20, CACHE_LINE_BYTES = 32 };
 
 	for(unsigned i = 0; i*CACHE_LINE_BYTES < g_memory.size; i++)
 	{
@@ -635,9 +692,9 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 		xp -= g_x_scroll.offset;
 		yp -= g_y_scroll.offset;
 
-		unsigned len = utoa_into(buffer, i*CACHE_LINE_BYTES);
+		unsigned len = utoa_into(buffer, i*CACHE_LINE_BYTES, 0);
 
-		db_text(buffer, len, xp+8*(6-len), h-64-yp, 0xff000000, 0xffcccccc);
+		db_text(buffer, len, xp+8*(4-len), h-64-yp -2, 0xff000000, 0xffcccccc);
 	}
 
 	for(unsigned i = 0; i < g_memory.size;)
@@ -645,110 +702,42 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 		unsigned x = i % CACHE_LINE_BYTES;
 		unsigned y = i / CACHE_LINE_BYTES;
 
-		signed xp = CELL_W * x + 8 + 64;
+		signed xp = CELL_W * x + 8 + 48;
 		signed yp = CELL_H * y;
 
 		xp -= g_x_scroll.offset;
 		yp -= g_y_scroll.offset;
 
 		void const * cell = &g_memory.data[i];
-
-		unsigned len;
 		auto type = _layout[i];
 		if(g_interpret != INTERPRET) type = g_interpret == NO_INTERPRET_DEC ? DT_U1 : DT_ANY;
-		unsigned cells = k_data_types[type].size;
-		//unsigned maxlen = 3 * cells;
-		switch(type)
-		{
-		case DT_ANY: {
-			u8 c = *(u8 const*)cell;
-			len = 2;
-			buffer[0] = "0123456789abcdef"[c >> 4];
-			buffer[1] = "0123456789abcdef"[c & 15];
-		} break;
-		case DT_U1: len = utoa_into(buffer, *(u8 const*)cell); break;
-		case DT_U2: len = utoa_into(buffer, *(u16 const*)cell); break;
-		case DT_U4: len = utoa_into(buffer, *(u32 const*)cell); break;
-		case DT_U8: len = utoa_into(buffer, *(u64 const*)cell); break;
-		case DT_S1: len = itoa_into(buffer, *(i8 const*)cell); break;
-		case DT_S2: len = itoa_into(buffer, *(i16 const*)cell); break;
-		case DT_S4: len = itoa_into(buffer, *(i32 const*)cell); break;
-		case DT_S8: len = itoa_into(buffer, *(i64 const*)cell); break;
-		case DT_BOOL:
-			{
-				u8 val = *(u8 const*)cell;
-				if(val == 0)
-					len = memcpy_string(buffer, String("no"));
-				else if(val == 1)
-					len = memcpy_string(buffer, String("yes"));
-				else
-					len = utoa_into(buffer, val);
-			} break;
-		case DT_CHAR: {
-			len = 1;
-			u8 c = *(u8 const*)cell;
-			switch(c)
-			{
-			case 0: { len = memcpy_string(buffer, String("END")); } break;
-			case '\n': { len = memcpy_string(buffer, String("EOL")); } break;
-			case '\r': { len = memcpy_string(buffer, String("\\r")); } break;
-			default:
-				{
-					if(c >= 128 || c < 32)
-					{
-						len = 2;
-						buffer[0] = "0123456789abcdef"[c >> 4];
-						buffer[1] = "0123456789abcdef"[c & 15];
-					} else { len = 1; buffer[0] = c; }
-				} break;
-			}
-		}
-		}
 
-		static const struct { u32 bg, font; } k_bg_colour[] = {
-			[DT_U1]   = { 0xffeecccc, 0xff000000 },
-			[DT_U2]   = { 0xffeecccc, 0xff000000 },
-			[DT_U4]   = { 0xffeecccc, 0xff000000 },
-			[DT_U8]   = { 0xffeecccc, 0xff000000 },
-			[DT_S1]   = { 0xffcceeee, 0xff000000 },
-			[DT_S2]   = { 0xffcceeee, 0xff000000 },
-			[DT_S4]   = { 0xffcceeee, 0xff000000 },
-			[DT_S8]   = { 0xffcceeee, 0xff000000 },
-			[DT_CHAR] = { 0xffcceecc, 0xff000000 },
-			[DT_BOOL] = { 0xffccccee, 0xff000000 },
-			[DT_ANY]  = { 0xffb8b8b8, 0xff888888 }
-		};
-
-		db_rectangle(&g_imBuf_lines, xp-2, h - 64+2 - yp, CELL_W * cells, 20, 0xff444444);
-		db_quad(&g_imBuf,            xp-2, h - 64+2 - yp, CELL_W * cells, 20, k_bg_colour[type].bg);
-		if(type == DT_CHAR)
-			db_text(buffer, len,     xp+CELL_W/2*cells - 4*len, h - 64 - yp, k_bg_colour[type].font, k_bg_colour[type].bg);
-		else
-			db_text(buffer, len,     xp+CELL_W*cells - 4 - 8*len, h - 64 - yp, k_bg_colour[type].font, k_bg_colour[type].bg);
-
-		i += cells;
+		u8 draw_cell(i32, i32, enum DataType, u64);
+		i += draw_cell(xp-2, h - 64 - yp, type, *(u64 const*)cell);
 	}
 	rgl_use_pipeline(pipeline);
 	db_flush_and_draw(&g_imBuf, vbo);
 	db_flush_and_draw_from(&g_imBuf_lines, vbo_lines, vao_lines);
 	render_text(w, h);
 
-	db_quad(&g_imBuf, 8+64 - g_x_scroll.offset, h-64+24 + g_y_scroll.offset, CELL_W*CACHE_LINE_BYTES, 20, 0xffdddddd);
-	db_quad(&g_imBuf, 8+64 + CELL_W * CACHE_LINE_BYTES - g_x_scroll.offset, h-64+24 + g_y_scroll.offset, CELL_W*7, 20, 0xffaaaaaa);
-	rgl_use_pipeline(pipeline);
-	db_flush_and_draw(&g_imBuf, vbo);
+	{ // memory table header bar
+		db_quad(&g_imBuf, 8+48 - g_x_scroll.offset, h-64+24 + g_y_scroll.offset, CELL_W*CACHE_LINE_BYTES, 20, 0xffdddddd);
+		db_quad(&g_imBuf, 8+48 + CELL_W * CACHE_LINE_BYTES - g_x_scroll.offset, h-64+24 + g_y_scroll.offset, CELL_W*7, 20, 0xffaaaaaa);
+		rgl_use_pipeline(pipeline);
+		db_flush_and_draw(&g_imBuf, vbo);
+	}
 
 	for(unsigned i = 0; i < CACHE_LINE_BYTES + 7; i++)
 	{
-		signed xp = CELL_W * i + 8 + 64;
+		signed xp = CELL_W * i + 8 + 48;
 		signed yp = CELL_H * -1;
 
 		xp -= g_x_scroll.offset;
 		yp -= g_y_scroll.offset;
 
-		unsigned len = utoa_into(buffer, i);
+		unsigned len = utoa_into(buffer, i, 0);
 
-		db_text(buffer, len, xp+8*(4-len), h-64-yp, 0xff000000, i >= CACHE_LINE_BYTES ? 0xffaaaaaa : 0xffdddddd);
+		db_text(buffer, len, xp+8*(4-len) - 8, h-64-yp, 0xff000000, i >= CACHE_LINE_BYTES ? 0xffaaaaaa : 0xffdddddd);
 	}
 	render_text(w, h);
 

@@ -1,6 +1,8 @@
 #ifndef __data_layout_h_defined
 #define __data_layout_h_defined
 
+#include <range.h>
+
 enum DataType: u8 {
 	DT_U1,
 	DT_U2,
