@@ -160,7 +160,8 @@ static bool callback_repaint(struct RUIViewDesc const * this, u32)
 		db_rectangle(&g_imBuf_lines, hl_x, hl_y, hl_w, hl_h, 0xff4444ff);
 
 		db_rectangle(&g_imBuf_lines, hl_x, this->y + this->h + 4 + CELL_H, hl_w, CELL_H, 0xff4444ff);
-		db_rectangle(&g_imBuf_lines, this->x - 40, hl_y, 32, CELL_H, 0xff4444ff);
+		db_rectangle(&g_imBuf_lines, this->x - 48, hl_y, 40, CELL_H, 0xff4444ff);
+		db_rectangle(&g_imBuf_lines, this->x - 48, this->y + this->h + 4 + CELL_H, 40, CELL_H, 0xff4444ff);
 	}
 
 

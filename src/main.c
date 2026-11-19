@@ -690,7 +690,7 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 
 		unsigned len = utoa_into(buffer, highlight_addr, 0);
 
-		db_text(buffer, len, xp+8*(4-len), h-64-yp -2, 0xff000000, 0xffcccccc);
+		db_text(buffer, len, xp+8*(4-len), h-64-yp, 0xff000000, 0xffcccccc);
 	}
 
 	// memory table side bar.
