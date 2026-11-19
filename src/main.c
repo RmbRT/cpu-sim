@@ -669,10 +669,10 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 		case CMD_STORE_A_AT_X_4: { *(u32 *)&_memory[input_value] = g_reg_a; } break;
 		case CMD_STORE_A_AT_X_8: { *(u64 *)&_memory[input_value] = g_reg_a; } break;
 
-		case CMD_STORE_X_AT_A_1: { *(u8 *) &_memory[input_value] = g_reg_b; } break;
-		case CMD_STORE_X_AT_A_2: { *(u16 *)&_memory[input_value] = g_reg_b; } break;
-		case CMD_STORE_X_AT_A_4: { *(u32 *)&_memory[input_value] = g_reg_b; } break;
-		case CMD_STORE_X_AT_A_8: { *(u64 *)&_memory[input_value] = g_reg_b; } break;
+		case CMD_STORE_X_AT_A_1: { *(u8 *) &_memory[g_reg_a] = input_value; } break;
+		case CMD_STORE_X_AT_A_2: { *(u16 *)&_memory[g_reg_a] = input_value; } break;
+		case CMD_STORE_X_AT_A_4: { *(u32 *)&_memory[g_reg_a] = input_value; } break;
+		case CMD_STORE_X_AT_A_8: { *(u64 *)&_memory[g_reg_a] = input_value; } break;
 		default: { panic("Forgot to implement this command!"); }
 		}
 		if(cmd != CMD_NOP) logint("X", input_value);
