@@ -342,7 +342,7 @@ static void init_memory()
 
 /* TODO:
 	- [X] refactor layout logic into separate file & functions.
-	- [ ] use Views, so we can handle clicking and hovering of cells (one view for the memory grid, not per cell).
+	- [X] use Views, so we can handle clicking and hovering of cells (one view for the memory grid, not per cell).
 	- [ ] when hovering a cell, we want to see its possible interpretations, and also explanations for things like EOL / \n, END / \0. And we want to show the ranges of types.
 	- [X] add registers.
 	- [X] add instructions & execution.
@@ -529,26 +529,26 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 			auto q_ = q;
 			q_.pos.x = q.pos.x-q.size.x-8;
 			db_string(String("A:"), q_.pos.x -32, q_.pos.y-2, 0xff000000, 0xffcccccc);
-			draw_cell(q_.pos.x, q_.pos.y, DT_U8, g_reg_a);
+			draw_cell(q_.pos.x, q_.pos.y, DT_U8, g_reg_a, false);
 			q_.pos.y -= CELL_H;
-			draw_cell(q_.pos.x, q_.pos.y, DT_S8, g_reg_a);
+			draw_cell(q_.pos.x, q_.pos.y, DT_S8, g_reg_a, false);
 			q_.pos.y -= CELL_H;
 			for(unsigned i = 0; i < 8; i++)
 			{
 				u8 c = g_reg_a >> (8*i);
-				draw_cell(q_.pos.x + CELL_W * i, q_.pos.y, DT_U1, c);
+				draw_cell(q_.pos.x + CELL_W * i, q_.pos.y, DT_U1, c, false);
 			}
 			q_.pos.y -= CELL_H;
 			for(unsigned i = 0; i < 8; i++)
 			{
 				u8 c = g_reg_a >> (8*i);
-				draw_cell(q_.pos.x + CELL_W * i, q_.pos.y, DT_ANY, c);
+				draw_cell(q_.pos.x + CELL_W * i, q_.pos.y, DT_ANY, c, false);
 			}
 			q_.pos.y -= CELL_H;
 			for(unsigned i = 0; i < 8; i++)
 			{
 				u8 c = g_reg_a >> (8*i);
-				draw_cell(q_.pos.x + CELL_W * i, q_.pos.y, DT_CHAR, c);
+				draw_cell(q_.pos.x + CELL_W * i, q_.pos.y, DT_CHAR, c, false);
 			}
 			q_.pos.y -= CELL_H;
 			q.pos.y = q_.pos.y;
@@ -558,26 +558,26 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 			auto q_ = q;
 			q_.pos.x = q.pos.x-q.size.x-8;
 			db_string(String("B:"), q_.pos.x -32, q_.pos.y-2, 0xff000000, 0xffcccccc);
-			draw_cell(q_.pos.x, q_.pos.y, DT_U8, g_reg_b);
+			draw_cell(q_.pos.x, q_.pos.y, DT_U8, g_reg_b, false);
 			q_.pos.y -= CELL_H;
-			draw_cell(q_.pos.x, q_.pos.y, DT_S8, g_reg_b);
+			draw_cell(q_.pos.x, q_.pos.y, DT_S8, g_reg_b, false);
 			q_.pos.y -= CELL_H;
 			for(unsigned i = 0; i < 8; i++)
 			{
 				u8 c = g_reg_b >> (8*i);
-				draw_cell(q_.pos.x + CELL_W * i, q_.pos.y, DT_U1, c);
+				draw_cell(q_.pos.x + CELL_W * i, q_.pos.y, DT_U1, c, false);
 			}
 			q_.pos.y -= CELL_H;
 			for(unsigned i = 0; i < 8; i++)
 			{
 				u8 c = g_reg_b >> (8*i);
-				draw_cell(q_.pos.x + CELL_W * i, q_.pos.y, DT_ANY, c);
+				draw_cell(q_.pos.x + CELL_W * i, q_.pos.y, DT_ANY, c, false);
 			}
 			q_.pos.y -= CELL_H;
 			for(unsigned i = 0; i < 8; i++)
 			{
 				u8 c = g_reg_b >> (8*i);
-				draw_cell(q_.pos.x + CELL_W * i, q_.pos.y, DT_CHAR, c);
+				draw_cell(q_.pos.x + CELL_W * i, q_.pos.y, DT_CHAR, c, false);
 			}
 			q_.pos.y -= CELL_H;
 			q.pos.y = q_.pos.y;
@@ -681,6 +681,20 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 
 	db_string(String("CPU Simulator"), 8-g_x_scroll.offset, h-(8-g_y_scroll.offset), 0xff000000, 0xffcccccc);
 
+	if(highlight_addr != -1)
+	{ // memory table top-left index
+		signed xp = 8;
+		signed yp = CELL_H * -1;
+
+		xp -= g_x_scroll.offset;
+		yp -= g_y_scroll.offset;
+
+		unsigned len = utoa_into(buffer, highlight_addr, 0);
+
+		db_text(buffer, len, xp+8*(4-len), h-64-yp -2, 0xff000000, 0xffcccccc);
+	}
+
+	// memory table side bar.
 	for(unsigned i = 0; i*CACHE_LINE_BYTES < g_memory.size; i++)
 	{
 		signed xp = 8;
@@ -694,49 +708,45 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 		db_text(buffer, len, xp+8*(4-len), h-64-yp -2, 0xff000000, 0xffcccccc);
 	}
 
-	for(unsigned i = 0; i < g_memory.size;)
-	{
-		unsigned x = i % CACHE_LINE_BYTES;
-		unsigned y = i / CACHE_LINE_BYTES;
-
-		signed xp = CELL_W * x + 8 + 48;
-		signed yp = CELL_H * y;
-
-		xp -= g_x_scroll.offset;
-		yp -= g_y_scroll.offset;
-
-		void const * cell = &g_memory.data[i];
-		auto type = _layout[i];
-		if(g_interpret != INTERPRET) type = g_interpret == NO_INTERPRET_DEC ? DT_U1 : DT_ANY;
-
-		u8 draw_cell(i32, i32, enum DataType, u64);
-		i += draw_cell(xp-2, h - 64 - yp, type, *(u64 const*)cell);
-	}
-	rgl_use_pipeline(pipeline);
-	db_flush_and_draw(&g_imBuf, vbo);
-	db_flush_and_draw_from(&g_imBuf_lines, vbo_lines, vao_lines);
-	render_text(w, h);
 
 	{ // memory table header bar
 		db_quad(&g_imBuf, 8+48 - g_x_scroll.offset, h-64+24 + g_y_scroll.offset, CELL_W*CACHE_LINE_BYTES, 20, 0xffdddddd);
 		db_quad(&g_imBuf, 8+48 + CELL_W * CACHE_LINE_BYTES - g_x_scroll.offset, h-64+24 + g_y_scroll.offset, CELL_W*7, 20, 0xffaaaaaa);
 		rgl_use_pipeline(pipeline);
 		db_flush_and_draw(&g_imBuf, vbo);
+
+		// memory table header bar labels
+		for(unsigned i = 0; i < CACHE_LINE_BYTES + 7; i++)
+		{
+			signed xp = CELL_W * i + 8 + 48;
+			signed yp = CELL_H * -1;
+
+			xp -= g_x_scroll.offset;
+			yp -= g_y_scroll.offset;
+
+			unsigned len = utoa_into(buffer, i, 0);
+
+			db_text(buffer, len, xp+8*(4-len) - 8, h-64-yp, 0xff000000, i >= CACHE_LINE_BYTES ? 0xffaaaaaa : 0xffdddddd);
+		}
 	}
-
-	for(unsigned i = 0; i < CACHE_LINE_BYTES + 7; i++)
-	{
-		signed xp = CELL_W * i + 8 + 48;
-		signed yp = CELL_H * -1;
-
-		xp -= g_x_scroll.offset;
-		yp -= g_y_scroll.offset;
-
-		unsigned len = utoa_into(buffer, i, 0);
-
-		db_text(buffer, len, xp+8*(4-len) - 8, h-64-yp, 0xff000000, i >= CACHE_LINE_BYTES ? 0xffaaaaaa : 0xffdddddd);
-	}
+	rgl_use_pipeline(pipeline);
+	db_flush_and_draw(&g_imBuf, vbo);
+	db_flush_and_draw_from(&g_imBuf_lines, vbo_lines, vao_lines);
 	render_text(w, h);
+
+	{ // memory table
+		extern struct RUIViewDesc ram_view;
+		i32 top = rui_frame_h - 64;
+		ram_view.x = 56 - g_x_scroll.offset;
+		ram_view.y = top + g_y_scroll.offset - ram_view.h;
+		ram_view.callback_repaint(&ram_view, dt);
+	}
+
+	rgl_use_pipeline(pipeline);
+	db_flush_and_draw(&g_imBuf, vbo);
+	db_flush_and_draw_from(&g_imBuf_lines, vbo_lines, vao_lines);
+	render_text(w, h);
+
 
 	glFinish();
 
