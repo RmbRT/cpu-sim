@@ -343,9 +343,16 @@ static void init_memory()
 	- [X] refactor layout logic into separate file & functions.
 	- [X] use Views, so we can handle clicking and hovering of cells (one view for the memory grid, not per cell).
 	- [ ] when hovering a cell, we want to see its possible interpretations, and also explanations for things like EOL / \n, END / \0. And we want to show the ranges of types.
+		- [ ] Visualise char codes when hovering over a char cell.
 	- [X] add registers.
 	- [X] add instructions & execution.
 	- [ ] add visualisation of active instruction (inputs, results, sources, destinations, description).
+	- [ ] Split into planning/programming view, and execution/debug view.
+		- [ ] Choosing a data type: 1234 for U[1248], QWER for S[1248], AS for char, bool.
+		- [ ] The programming view does not need to show register values, as it is not yet running a program. Also, it would show the initial memory state, which would be mostly 0's.
+		- [ ] The execution view does not need to show any editing stuff, but needs to show the current state of the CPU, allow inspection of values, etc.
+		- [ ] We want to have a memory view that is dedicated to showing which cell has what meaning / name, rather than showing its contents. That would be mostly used for the programming phase, but is also useful during the execution phase.
+			- [ ] Additionally, values shown at runtime should also be attempted to resolve into names, if they are a valid address value.
 	- [ ] extend font with lowercase letters.
 	- [ ] add console for printing, and maybe for typing.
 	- [ ] add text field for code.
