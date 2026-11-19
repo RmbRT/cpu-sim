@@ -52,6 +52,7 @@ struct MemoryConfig {
 
 struct Memory {
 	void * data;
+	enum DataType * layout;
 	unsigned size;
 };
 

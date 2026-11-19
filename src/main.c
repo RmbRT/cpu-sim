@@ -13,6 +13,7 @@
 
 #include "data_layout.h"
 #include "ram_vis.h"
+#include "common.h"
 
 static char const fragment_shader[] = {
 #embed "fragment_shader.glsl"
@@ -24,9 +25,9 @@ static char const vertex_shader[] = {
 	,'\n'
 };
 
-static RGL_HANDLE(RGLShaderProgram) program;
-static RGL_HANDLE(RGLBuffer) vbo;
-static RGL_HANDLE(RGLBuffer) vbo_lines;
+RGL_HANDLE(RGLShaderProgram) program;
+RGL_HANDLE(RGLBuffer) vbo;
+RGL_HANDLE(RGLBuffer) vbo_lines;
 
 
 void on_after_file_drop(void *, u32);
@@ -34,9 +35,9 @@ void on_after_file_drop(void *, u32);
 static DECL_ATTR_LOCS(Shader);
 static DECL_UNIFORM_LOCS(Shader);
 
-static RGL_HANDLE(RGLPipelineState) pipeline;
-static RGL_HANDLE(RGLVertexFetch) vao;
-static RGL_HANDLE(RGLVertexFetch) vao_lines;
+RGL_HANDLE(RGLPipelineState) pipeline;
+RGL_HANDLE(RGLVertexFetch) vao;
+RGL_HANDLE(RGLVertexFetch) vao_lines;
 
 static void init_memory();
 
@@ -218,12 +219,7 @@ static void scroll_animate(struct Scroll * scroll, u64 now, u64 dt)
 static u16 last_screen_h = 0;
 static u64 g_time = 0;
 
-enum Interpret {
-	INTERPRET,
-	NO_INTERPRET_HEX,
-	NO_INTERPRET_DEC
-};
-static enum Interpret g_interpret = INTERPRET;
+enum Interpret g_interpret = INTERPRET;
 
 
 EXPORT bool on_mouse_press(enum MouseButton button, i32 x, i32 y, enum ModifierKeys mods)
@@ -312,7 +308,7 @@ static i64 g_min_y_render = 0;
 
 static u8 _memory[1024];
 static enum DataType _layout[1024];
-static struct Memory g_memory = { _memory, sizeof(_memory) };
+struct Memory g_memory = { _memory, _layout, sizeof(_memory) };
 
 static void init_memory()
 {
@@ -366,6 +362,12 @@ static void init_memory()
 
 static i64 g_reg_a = 0;
 static i64 g_reg_b = 0;
+struct RUINumberTextField g_reg_x_field = {
+	.min = -0x8000000000000000,
+	.max =  0x7fffffffffffffff,
+	.default_value = 0
+};
+extern i64 highlight_addr;
 
 EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 {
@@ -591,14 +593,9 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 		db_string(String("Commands"), q.pos.x - q.size.x - 8, q.pos.y, 0xff000000, 0xffcccccc);
 		//q.pos.y -= 24;
 
-		static struct RUINumberTextField s_addr_field = {
-			.min = -0x8000000000000000,
-			.max =  0x7fffffffffffffff,
-			.default_value = 0
-		};
 		db_string(String("X: "), q.pos.x, q.pos.y, 0xff000000, 0xffcccccc);
-		rui_number_textfield_draw(&s_addr_field, q.pos.x + 3*8, q.pos.y, q.size.x-3*8);
-		i64 input_value = rui_number_textfield_get(&s_addr_field);
+		rui_number_textfield_draw(&g_reg_x_field, q.pos.x + 3*8, q.pos.y, q.size.x-3*8);
+		i64 input_value = rui_number_textfield_get(&g_reg_x_field);
 		q.pos.y -= 30;
 
 
@@ -663,8 +660,8 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 		case CMD_MUL: { g_reg_a *= g_reg_b; } break;
 		case CMD_B_SET_A: { g_reg_b = g_reg_a; } break;
 		case CMD_A_SET_B: { g_reg_a = g_reg_b; } break;
-		case CMD_X_SET_A: { rui_number_textfield_set(&s_addr_field, g_reg_a); } break;
-		case CMD_X_SET_B: { rui_number_textfield_set(&s_addr_field, g_reg_b); } break;
+		case CMD_X_SET_A: { rui_number_textfield_set(&g_reg_x_field, g_reg_a); } break;
+		case CMD_X_SET_B: { rui_number_textfield_set(&g_reg_x_field, g_reg_b); } break;
 		case CMD_SWAP_A_B: { auto tmp = g_reg_a; g_reg_a = g_reg_b; g_reg_b = tmp; } break;
 
 		case CMD_STORE_A_AT_X_1: { *(u8 *) &_memory[input_value] = g_reg_a; } break;

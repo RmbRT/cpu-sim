@@ -1,5 +1,6 @@
 #include "ram_vis.h"
 #include "vertex.h"
+#include "common.h"
 
 #include <rmbrt-font/font.h>
 
