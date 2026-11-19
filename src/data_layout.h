@@ -14,7 +14,8 @@ enum DataType: u8 {
 	DT_S8,
 	DT_CHAR,
 	DT_BOOL,
-	DT_ANY
+	DT_RAW,
+	DT_RAW_IGNORE
 };
 
 static struct { int size; bool sign; } const k_data_types[] = {
@@ -28,7 +29,8 @@ static struct { int size; bool sign; } const k_data_types[] = {
 	[DT_S8] = { 8, true },
 	[DT_CHAR] = { 1, false },
 	[DT_BOOL] = { 1, false },
-	[DT_ANY] = { 1, false }
+	[DT_RAW] = { 1, false },
+	[DT_RAW_IGNORE] = { 1, false }
 };
 
 struct CacheParams {

@@ -320,8 +320,7 @@ static void init_memory()
 		_layout[i] = DT_U1; // seed % _Countof(k_data_types);
 	}
 
-	memset(_layout, DT_ANY, sizeof(_layout));
-	memset(_layout+sizeof(_layout) - 8, DT_ANY, 8);
+	memset(_layout, DT_RAW_IGNORE, sizeof(_layout));
 
 	{
 		auto str = String("Hello, world!\nTest 1 2 3");
@@ -542,7 +541,7 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 			for(unsigned i = 0; i < 8; i++)
 			{
 				u8 c = g_reg_a >> (8*i);
-				draw_cell(q_.pos.x + CELL_W * i, q_.pos.y, DT_ANY, c, false);
+				draw_cell(q_.pos.x + CELL_W * i, q_.pos.y, DT_RAW, c, false);
 			}
 			q_.pos.y -= CELL_H;
 			for(unsigned i = 0; i < 8; i++)
@@ -571,7 +570,7 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 			for(unsigned i = 0; i < 8; i++)
 			{
 				u8 c = g_reg_b >> (8*i);
-				draw_cell(q_.pos.x + CELL_W * i, q_.pos.y, DT_ANY, c, false);
+				draw_cell(q_.pos.x + CELL_W * i, q_.pos.y, DT_RAW, c, false);
 			}
 			q_.pos.y -= CELL_H;
 			for(unsigned i = 0; i < 8; i++)

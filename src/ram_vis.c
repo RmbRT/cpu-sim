@@ -19,7 +19,7 @@ u8 draw_cell(i32 xp, i32 yp, enum DataType type, u64 contents, bool highlight) {
 	//unsigned maxlen = 3 * cells;
 	switch(type)
 	{
-	case DT_ANY: {
+	case DT_RAW: case DT_RAW_IGNORE: {
 		u8 c = contents;
 		len = 2;
 		buffer[0] = "0123456789abcdef"[c >> 4];
@@ -73,17 +73,21 @@ u8 draw_cell(i32 xp, i32 yp, enum DataType type, u64 contents, bool highlight) {
 		[DT_S2]   = { 0xffcceeee, 0xff000000 },
 		[DT_S4]   = { 0xffcceeee, 0xff000000 },
 		[DT_S8]   = { 0xffcceeee, 0xff000000 },
-		[DT_CHAR] = { 0xffcceecc, 0xff000000 },
+		[DT_CHAR] = { 0xffcceecc, 0xff006600 },
 		[DT_BOOL] = { 0xffccccee, 0xff000000 },
-		[DT_ANY]  = { 0xffb8b8b8, 0xff888888 }
+		[DT_RAW]  = { 0xffb8b8b8, 0xff000000 },
+		[DT_RAW_IGNORE]  = { 0xffb8b8b8, 0xff888888 }
 	};
 
-	db_rectangle(&g_imBuf_lines, xp, yp, CELL_W * cells, 20, highlight ? 0xff4444ff : 0xff444444);
-	db_quad(&g_imBuf,            xp, yp, CELL_W * cells, 20, k_bg_colour[type].bg);
-	if(type == DT_CHAR)
-		db_text(buffer, len,     xp+2+CELL_W/2*cells - 4*len, yp-2, k_bg_colour[type].font, k_bg_colour[type].bg);
-	else
-		db_text(buffer, len,     xp+2+CELL_W*cells - 4 - 8*len, yp-2, k_bg_colour[type].font, k_bg_colour[type].bg);
+	u32 bg = k_bg_colour[type].bg + highlight * 0x00111111;
+	u32 fg = k_bg_colour[type].font;
+
+	db_rectangle(&g_imBuf_lines, xp, yp, CELL_W * cells, CELL_H, highlight ? 0xff4444ff : 0xff444444);
+	db_quad(&g_imBuf,            xp, yp, CELL_W * cells, CELL_H, bg);
+	if(type == DT_CHAR) // center chars horizontally
+		db_text(buffer, len, xp+2+CELL_W/2*cells - 4*len, yp-2, fg, bg);
+	else // right-align numbers.
+		db_text(buffer, len, xp+2+CELL_W*cells - 4 - 8*len, yp-2, fg, bg);
 
 	return cells;
 }
@@ -132,7 +136,7 @@ static bool callback_repaint(struct RUIViewDesc const * this, u32)
 
 		void const * cell = &g_memory.data[i];
 		auto type = g_memory.layout[i];
-		if(g_interpret != INTERPRET) type = g_interpret == NO_INTERPRET_DEC ? DT_U1 : DT_ANY;
+		if(g_interpret != INTERPRET) type = g_interpret == NO_INTERPRET_DEC ? DT_U1 : DT_RAW;
 
 		u32 cells = k_data_types[type].size;
 		bool highlight = (u64) (highlight_addr - (i64)(u64)i) < cells;
@@ -187,7 +191,7 @@ static struct RUIEventReaction callback_on_mousedown(struct RUIViewDesc const * 
 		for(i64 i = start; i <= cell_addr; i++)
 		{
 			auto type = g_memory.layout[i];
-			if(g_interpret != INTERPRET) type = g_interpret == NO_INTERPRET_DEC ? DT_U1 : DT_ANY;
+			if(g_interpret != INTERPRET) type = g_interpret == NO_INTERPRET_DEC ? DT_U1 : DT_RAW;
 			if(i + k_data_types[type].size > cell_addr)
 				cell_addr = i;
 		}
@@ -227,7 +231,7 @@ static struct RUIEventReaction callback_on_mousemove(struct RUIViewDesc const * 
 		for(i64 i = start; i <= cell_addr; i++)
 		{
 			auto type = g_memory.layout[i];
-			if(g_interpret != INTERPRET) type = g_interpret == NO_INTERPRET_DEC ? DT_U1 : DT_ANY;
+			if(g_interpret != INTERPRET) type = g_interpret == NO_INTERPRET_DEC ? DT_U1 : DT_RAW;
 			if(i + k_data_types[type].size > cell_addr)
 				cell_addr = i;
 		}
