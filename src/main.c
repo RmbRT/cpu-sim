@@ -603,6 +603,7 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 		rui_number_textfield_draw(&g_reg_x_field, q.pos.x + 3*8, q.pos.y, q.size.x-3*8);
 		i64 input_value = rui_number_textfield_get(&g_reg_x_field);
 		q.pos.y -= 30;
+		(void) input_value;
 
 
 		enum Command cmd = CMD_NOP;
@@ -638,50 +639,6 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 
 		if(cmd != CMD_NOP) is_animating = true;
 
-		switch(cmd)
-		{
-		case CMD_NOP: break;
-		case CMD_SET_A: { g_reg_a = input_value; logint("X", input_value); } break;
-		case CMD_LOAD_A_U1: { g_reg_a = *(u8 const*)&_memory[input_value]; } break;
-		case CMD_LOAD_A_U2: { g_reg_a = *(u16 const*)&_memory[input_value]; } break;
-		case CMD_LOAD_A_U4: { g_reg_a = *(u32 const*)&_memory[input_value]; } break;
-		case CMD_LOAD_A_U8: { g_reg_a = *(u64 const*)&_memory[input_value]; } break;
-		case CMD_LOAD_A_S1: { g_reg_a = *(i8 const*)&_memory[input_value]; } break;
-		case CMD_LOAD_A_S2: { g_reg_a = *(i16 const*)&_memory[input_value]; } break;
-		case CMD_LOAD_A_S4: { g_reg_a = *(i32 const*)&_memory[input_value]; } break;
-		case CMD_LOAD_A_S8: { g_reg_a = *(i64 const*)&_memory[input_value]; } break;
-
-		case CMD_SET_B: { g_reg_b = input_value; } break;
-		case CMD_LOAD_B_U1: { g_reg_b = *(u8 const*)&_memory[input_value]; } break;
-		case CMD_LOAD_B_U2: { g_reg_b = *(u16 const*)&_memory[input_value]; } break;
-		case CMD_LOAD_B_U4: { g_reg_b = *(u32 const*)&_memory[input_value]; } break;
-		case CMD_LOAD_B_U8: { g_reg_b = *(u64 const*)&_memory[input_value]; } break;
-		case CMD_LOAD_B_S1: { g_reg_b = *(i8 const*)&_memory[input_value]; } break;
-		case CMD_LOAD_B_S2: { g_reg_b = *(i16 const*)&_memory[input_value]; } break;
-		case CMD_LOAD_B_S4: { g_reg_b = *(i32 const*)&_memory[input_value]; } break;
-		case CMD_LOAD_B_S8: { g_reg_b = *(i64 const*)&_memory[input_value]; } break;
-
-		case CMD_ADD: { g_reg_a += g_reg_b; } break;
-		case CMD_SUB: { g_reg_a -= g_reg_b; } break;
-		case CMD_MUL: { g_reg_a *= g_reg_b; } break;
-		case CMD_B_SET_A: { g_reg_b = g_reg_a; } break;
-		case CMD_A_SET_B: { g_reg_a = g_reg_b; } break;
-		case CMD_X_SET_A: { rui_number_textfield_set(&g_reg_x_field, g_reg_a); } break;
-		case CMD_X_SET_B: { rui_number_textfield_set(&g_reg_x_field, g_reg_b); } break;
-		case CMD_SWAP_A_B: { auto tmp = g_reg_a; g_reg_a = g_reg_b; g_reg_b = tmp; } break;
-
-		case CMD_STORE_A_AT_X_1: { *(u8 *) &_memory[input_value] = g_reg_a; } break;
-		case CMD_STORE_A_AT_X_2: { *(u16 *)&_memory[input_value] = g_reg_a; } break;
-		case CMD_STORE_A_AT_X_4: { *(u32 *)&_memory[input_value] = g_reg_a; } break;
-		case CMD_STORE_A_AT_X_8: { *(u64 *)&_memory[input_value] = g_reg_a; } break;
-
-		case CMD_STORE_X_AT_A_1: { *(u8 *) &_memory[g_reg_a] = input_value; } break;
-		case CMD_STORE_X_AT_A_2: { *(u16 *)&_memory[g_reg_a] = input_value; } break;
-		case CMD_STORE_X_AT_A_4: { *(u32 *)&_memory[g_reg_a] = input_value; } break;
-		case CMD_STORE_X_AT_A_8: { *(u64 *)&_memory[g_reg_a] = input_value; } break;
-		default: { panic("Forgot to implement this command!"); }
-		}
-		if(cmd != CMD_NOP) logint("X", input_value);
 	}
 
 
