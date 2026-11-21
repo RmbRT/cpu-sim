@@ -353,9 +353,9 @@ static void init_memory()
 		- [ ] The execution view does not need to show any editing stuff, but needs to show the current state of the CPU, allow inspection of values, etc.
 		- [ ] We want to have a memory view that is dedicated to showing which cell has what meaning / name, rather than showing its contents. That would be mostly used for the programming phase, but is also useful during the execution phase.
 			- [ ] Additionally, values shown at runtime should also be attempted to resolve into names, if they are a valid address value.
-	- [ ] extend font with lowercase letters.
+	- [X] extend font with lowercase letters.
 	- [ ] add console for printing, and maybe for typing.
-	- [ ] add text field for code.
+	- [X] add text field for code.
 		- [ ] add assembly language.
 		- [ ] add higher language. C-like?
 	- [ ] add pointers, hovering over a pointer will highlight the cell it points to.
@@ -709,6 +709,9 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 	db_flush_and_draw(&g_imBuf, vbo);
 	db_flush_and_draw_from(&g_imBuf_lines, vbo_lines, vao_lines);
 	render_text(w, h);
+
+	static struct RUITextArea s_code_area = { };
+	rui_textarea_draw(&s_code_area, 400, 200, 800, 150);
 
 
 	glFinish();
