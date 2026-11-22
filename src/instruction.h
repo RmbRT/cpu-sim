@@ -19,6 +19,9 @@ enum Operation : u8 {
 	OP_NONE,
 	OP_TERMINATE,
 
+	OP_COPY,
+	OP_SWAP,
+
 	OP_LOAD_U1,
 	OP_LOAD_S1,
 	OP_LOAD_U2,

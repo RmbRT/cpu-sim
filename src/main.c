@@ -713,6 +713,29 @@ EXPORT bool on_frame(u16 w, u16 h, u32 dt)
 	static struct RUITextArea s_code_area = { };
 	rui_textarea_draw(&s_code_area, 400, 200, 800, 150);
 
+	struct String code = rui_textarea_get_utf8_contents(&s_code_area);
+	for(unsigned line_start = 0; line_start < code.length;)
+	{
+		unsigned line_end = line_start;
+		for(; line_end < code.length; line_end++)
+			if(line_end == '\n') break;
+
+		struct Instruction inst;
+		switch(parse_line(code.ptr+line_start, line_end - line_start, &inst))
+		{
+		case PR_INSTRUCTION:
+			{} break;
+		case PR_ERROR:
+			{
+				db_
+			} break;
+		case PR_BLANK_LINE:
+		case PR_EOF:
+		}
+
+		line_start = line_end + 1;
+	}
+
 
 	glFinish();
 

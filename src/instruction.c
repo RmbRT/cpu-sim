@@ -20,6 +20,9 @@ struct String const k_operation_mnemonics[OP_END] = {
 	[OP_NONE] = String("NOP"),
 	[OP_TERMINATE] = String("TERMINATE"),
 
+	[OP_COPY] = String("COPY"),
+	[OP_SWAP] = String("SWAP"),
+
 	[OP_LOAD_U1] = String("LOAD_U1"),
 	[OP_LOAD_S1] = String("LOAD_S1"),
 	[OP_LOAD_U2] = String("LOAD_U2"),
@@ -96,6 +99,9 @@ static char const * validate_instruction(struct Instruction const * instruction,
 		[OP_NONE] = { .args = 0 },
 		[OP_TERMINATE] = { .args = 1 },
 
+		[OP_COPY] = { .args = 1, .dst = true },
+		[OP_SWAP] = { .args = 2 },
+
 		[OP_LOAD_U1] = { .args = 1, .dst = true, .memAccess=1 },
 		[OP_LOAD_S1] = { .args = 1, .dst = true, .memAccess=1 },
 		[OP_LOAD_U2] = { .args = 1, .dst = true, .memAccess=2 },
@@ -168,7 +174,6 @@ static char const * validate_instruction(struct Instruction const * instruction,
 
 	if(instruction->op >= OP_END) return "illegal opcode";
 
-
 	{
 		bool has_dst = (instruction->dst != ARG_NONE);
 		if(has_dst != k_op_validation_table[instruction->op].dst)
@@ -195,6 +200,13 @@ static char const * validate_instruction(struct Instruction const * instruction,
 	for(unsigned i = 0; i < *argc; i++)
 		if(instruction->src[i] >= ARG_END)
 			return "illegal instruction";
+
+	if(instruction->op == OP_SWAP)
+	{
+		if(instruction->src[0] < ARG_REG0
+		|| instruction->src[1] < ARG_REG0)
+			return "illegal instruction";
+	}
 
 	*memAccessSize = k_op_validation_table[instruction->op].memAccess;
 
@@ -235,6 +247,12 @@ void execute_instruction(struct CPUState * cpu, struct Instruction const * instr
 		cpu->running = false;
 		cpu->termination_code = get_arg(0, cpu, instruction);
 		return;
+	} break;
+
+	case OP_COPY: *dst = arg0; break;
+	case OP_SWAP: {
+		cpu->registers[instruction->src[0] - ARG_REG0] = arg1;
+		cpu->registers[instruction->src[1] - ARG_REG0] = arg0;
 	} break;
 
 	case OP_LOAD_U1: *dst = *(u8 const*)&cpu->memory[arg0]; break;
